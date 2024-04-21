@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS tokens_updated_at_trigger ON tokens;

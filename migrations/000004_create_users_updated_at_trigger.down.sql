@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS users_updated_at_trigger ON users;
