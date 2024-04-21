@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	u "nfs002/template/v1/internal/utils"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -20,12 +21,18 @@ func (app *application) routes() http.Handler {
 		MaxAge:           300,
 	}))
 
-	if app.config.env == "development" {
+	if app.config.env == "dev" {
+		u.InfoLog("Using request logging middlware")
 		mux.Use(middleware.Logger)
 	}
 
 	mux.Get("/hello", app.Hello)
 	mux.Post("/api/authenticate", app.CreateAuthToken)
+
+	mux.Route("/api", func(mux chi.Router) {
+		mux.Use(app.WithScope(nil))
+		mux.Get("/hello-user", app.HelloUser)
+	})
 
 	mux.Route("/api/read-a", func(mux chi.Router) {
 		mux.Use(app.WithScope([]string{"read:a"}))

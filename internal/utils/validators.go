@@ -6,7 +6,7 @@ import (
 
 func ValidateScope(fl validator.FieldLevel) bool {
 	var value = fl.Field().String()
-	for _, scope := range VALID_SCOPES {
+	for _, scope := range ValidScopes {
 		if value == scope {
 			return true
 		}

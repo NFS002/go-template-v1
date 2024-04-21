@@ -5,7 +5,7 @@ type TokenRequest struct {
 	Email    string   `json:"email"  validate:"required,email"`
 	Password string   `json:"password" validate:"required"`
 	Scope    []string `json:"scope" validate:"dive,scope"`
-	Expiry   int      `json:"expiry" validate:"gte=0"`
+	Expiry   int      `json:"expiry" validate:"gte=-55,lte=1380"`
 }
 
 func (t *TokenRequest) Defaults() {

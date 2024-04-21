@@ -6,17 +6,21 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"log"
+	"nfs002/template/v1/internal/utils"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Token is the type for authentication tokens
 type Token struct {
-	PlainText string    `json:"token"`
+	ID        int64     `json:"-"`
 	UserID    int64     `json:"-"`
+	PlainText string    `json:"token"`
 	Hash      string    `json:"-"`
 	Expiry    time.Time `json:"expiry"`
 	Scope     []string  `json:"scope"`
@@ -73,6 +77,21 @@ func (m *DBModel) InsertToken(t *Token, u User) error {
 	return nil
 }
 
+func (m *DBModel) DeleteToken(t *Token) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	stmt := `delete from tokens where id = $1`
+	_, err := m.DB.ExecContext(ctx, stmt, t.ID)
+
+	if err != nil {
+		log.Error().AnErr("error", err).Str("token", t.PlainText).Msg("Failed to delete token")
+		return err
+	}
+
+	return nil
+}
+
 func (m *DBModel) GetUserForToken(tokenStr string) (*User, *Token, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -83,32 +102,42 @@ func (m *DBModel) GetUserForToken(tokenStr string) (*User, *Token, error) {
 	var user User
 	var token Token = Token{PlainText: tokenStr}
 	var scope string
+	var expiry time.Time
 
 	query := `
 	SELECT
-		u.id, u.first_name, u.last_name, u.email, t.expiry, t.scope
+		t.id, u.id, u.first_name, u.last_name, u.email, t.expiry, t.scope
 	FROM
 		users u
 		INNER JOIN tokens t ON (u.id = t.user_id)
 	WHERE
-		t.token_hash = $1 AND t.expiry > NOW();
+		t.token_hash = $1
 
 	`
 
 	err := m.DB.QueryRowContext(ctx, query, hex.EncodeToString(tokenHash[:])).Scan(
+		&token.ID,
 		&user.ID,
 		&user.FirstName,
 		&user.LastName,
 		&user.Email,
-		&token.Expiry,
+		&expiry,
 		&scope)
 
-	token.Scope = strings.Split(scope, ",")
-
 	if err != nil {
-		log.Println(err)
+		utils.ErrorLog("Error querying from db", err)
 		return nil, nil, err
 	}
+
+	token.Expiry = time.Date(expiry.Year(), expiry.Month(), expiry.Day(), expiry.Hour(),
+		expiry.Minute(), expiry.Second(), 0, utils.Location)
+
+	if time.Now().After(token.Expiry) {
+		defer m.DeleteToken(&token)
+		return nil, nil, errors.New("token expired")
+	}
+
+	token.Scope = strings.Split(scope, ",")
 
 	return &user, &token, nil
 }

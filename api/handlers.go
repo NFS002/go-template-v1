@@ -14,21 +14,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Creates a new user and save it to the DB
-func (app *application) NewUser(firstName, lastName, email string) (int, error) {
-	customer := m.Customer{
-		FirstName: firstName,
-		LastName:  lastName,
-		Email:     email,
-	}
-	id, err := app.DB.InsertCustomer(customer)
-	if err != nil {
-		app.errorLog.Println(err)
-		return 0, err
-	}
-	return id, nil
-}
-
 func (app *application) CreateAuthToken(w http.ResponseWriter, r *http.Request) {
 	var input m.TokenRequest
 
@@ -69,8 +54,8 @@ func (app *application) CreateAuthToken(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// generate the token
-	duration := (2 * time.Hour) + (time.Duration(input.Expiry) * time.Minute)
-	token, err := m.GenerateToken(user.ID, duration, input.Scope)
+	ttl := (1 * time.Hour) + (time.Duration(input.Expiry) * time.Minute)
+	token, err := m.GenerateToken(user.ID, ttl, input.Scope)
 	if err != nil {
 		app.internalError(w)
 		return
