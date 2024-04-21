@@ -1,1 +1,1 @@
-DELETE FROM users WHERE id = 1
+DELETE FROM users WHERE email IN ('user@example.com',  'user2@example.com', 'user3@example.com');

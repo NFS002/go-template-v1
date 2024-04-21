@@ -75,3 +75,4 @@ A relatively simple golang application template with the following features:
 7. Add basic unit tests
 8. Env file comments
 9. Add more docs to README
+10. Auth middleware applied to group not individual routes. Use gin ?
