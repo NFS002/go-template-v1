@@ -8,14 +8,15 @@ import (
 	"strings"
 	"time"
 
-	m "nfs002/template/v1/internal/models"
+	md "nfs002/template/v1/internal/models"
+	ut "nfs002/template/v1/internal/utils"
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func (app *application) CreateAuthToken(w http.ResponseWriter, r *http.Request) {
-	var input m.TokenRequest
+	var input md.TokenRequest
 
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequest(w, err)
@@ -55,7 +56,7 @@ func (app *application) CreateAuthToken(w http.ResponseWriter, r *http.Request) 
 
 	// generate the token
 	ttl := (1 * time.Hour) + (time.Duration(input.Expiry) * time.Minute)
-	token, err := m.GenerateToken(user.ID, ttl, input.Scope)
+	token, err := md.GenerateToken(user.ID, ttl, input.Scope)
 	if err != nil {
 		app.internalError(w)
 		return
@@ -69,9 +70,9 @@ func (app *application) CreateAuthToken(w http.ResponseWriter, r *http.Request) 
 
 	// send response
 	var payload struct {
-		Error   bool     `json:"error"`
-		Message string   `json:"message"`
-		Token   *m.Token `json:"authentication_token"`
+		Error   bool      `json:"error"`
+		Message string    `json:"message"`
+		Token   *md.Token `json:"authentication_token"`
 	}
 
 	payload.Error = false
@@ -81,7 +82,7 @@ func (app *application) CreateAuthToken(w http.ResponseWriter, r *http.Request) 
 	_ = app.writeJSON(w, http.StatusOK, payload)
 }
 
-func (app *application) authenticateToken(r *http.Request, scope []string) (*m.User, *m.Token, error) {
+func (app *application) authenticateToken(r *http.Request, scope []string) (*md.User, *md.Token, error) {
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
 		return nil, nil, errors.New("no authorization header received")
@@ -126,7 +127,7 @@ func (app *application) Hello(w http.ResponseWriter, r *http.Request) {
 func (app *application) HelloUser(w http.ResponseWriter, r *http.Request) {
 	// validate the token, and get associated user
 	key := requestContextKey{Key: "user"}
-	u, ok := r.Context().Value(key).(*m.User)
+	u, ok := r.Context().Value(key).(*md.User)
 	if !ok {
 		app.internalError(w)
 		return
@@ -169,7 +170,7 @@ func (app *application) GetOneUser(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) CreateUser(w http.ResponseWriter, r *http.Request) {
 
-	var user m.User
+	var user md.User
 
 	err := app.readJSON(w, r, &user)
 	if err != nil {
@@ -204,18 +205,25 @@ func (app *application) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := strconv.Atoi(id)
 
 	if userID <= 0 || err != nil {
+		ut.ErrorLog("Error parsing 'id' parameter", err)
 		app.badRequest(w, errors.New("invalid request parameter 'UserID'"))
 	}
 
-	var user m.User
+	var user md.UpdateUserRequest
 
 	if err := app.readJSON(w, r, &user); err != nil {
 		app.badRequest(w, err)
 		return
 	}
 
+	if user.Trim(); user.IsEmpty() {
+		app.badRequest(w, errors.New("nothing to update"))
+		return
+	}
+
 	// Update an existing user
-	if err := app.DB.EditUser(user); err != nil {
+	if err := app.DB.EditUser(userID, user); err != nil {
+		ut.ErrorLog("Error updating user", err)
 		app.badRequest(w, err)
 		return
 	}
@@ -227,7 +235,7 @@ func (app *application) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err = app.DB.UpdatePasswordForUser(user, string(newHash)); err != nil {
+		if err := app.DB.UpdatePasswordForUser(userID, user, string(newHash)); err != nil {
 			app.internalError(w)
 			return
 		}
@@ -239,16 +247,23 @@ func (app *application) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.Error = false
+	resp.Message = "sucesfully updated user"
 	app.writeJSON(w, http.StatusOK, resp)
 }
 
 // DeleteUser deletes a user, and all associated tokens, from the database
 func (app *application) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	userID, _ := strconv.Atoi(id)
+	userID, err := strconv.Atoi(id)
 
-	err := app.DB.DeleteUser(userID)
-	if err != nil {
+	if userID <= 0 || err != nil {
+		ut.ErrorLog("Error parsing 'id' parameter", err)
+		app.badRequest(w, errors.New("invalid request parameter 'UserID'"))
+		return
+	}
+
+	if err := app.DB.DeleteUser(userID); err != nil {
+		ut.ErrorLog("Error deleting user", err)
 		app.badRequest(w, err)
 		return
 	}
@@ -259,5 +274,6 @@ func (app *application) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.Error = false
+	resp.Message = "succesfully deleted user"
 	app.writeJSON(w, http.StatusOK, resp)
 }

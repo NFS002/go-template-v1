@@ -41,19 +41,18 @@ func GetBoolEnvOrDefault(key string, fallback bool) bool {
 // If the APP_ENV variable is set and the file .env.{APP_ENV} exists, load that
 // Otherwise, default to .env
 func LoadEnv() {
-
 	value, exists := os.LookupEnv("APP_ENV")
-	log.Info().Str("message", "Loading env: reading $APP_ENV").Str("APP_ENV", value)
+	log.Info().Str("APP_ENV", value).Msg("Loading env: reading $APP_ENV")
 	if exists && len(value) > 0 {
 		filename := fmt.Sprintf(".env.%s", value)
 		if _, err := os.Stat(filename); err == nil {
-			log.Info().Str("message", "Loading env: Found file").Str("filename", filename)
+			log.Info().Str("filename", filename).Msg("Loading env: Found file")
 			dotenv.Load(filename)
 			return
 		} else {
-			log.Info().Str("message", "loading env: File not found").Str("filename", filename)
+			log.Info().Str("filename", filename).Msg("loading env: File not found")
 		}
 	}
-	log.Info().Str("action", "Loading env: Using default file").Str("filename", ".env")
+	log.Info().Str("filename", ".env").Msg("Loading env: Using default file")
 	dotenv.Load(".env")
 }

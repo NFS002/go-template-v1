@@ -10,10 +10,13 @@ A relatively simple golang application template with the following features:
 - Lazy expired token cleanup
     - When a request is sent using an expired token, the token is deleted from the database
 - When the app starts, it looks for an environemnt variable `APP_ENV`
+    - `$APP_ENV` must be set manually before running the app
+        - e.g `APP_ENV=dev go run .`
     - If this is set, it attempts to load the environment variables in the file `.env.${APP_ENV}`
         - If file does not exist, it attempts to load the environment variables in the default file `.env`
     - If this is not set, it attempts to load the environment variables in the default file `.env`
-- Connection to the db instance from the app is set via the `$POSTGRESQL_URL` environment variable
+    - Connection to the db instance from the app is set via the `$POSTGRESQL_URL` environment variable
+    - Uses the [godotenv](https://github.com/joho/godotenv) module for loading env files
 - Database migrtations managed by the [golang-migrate](https://github.com/golang-migrate/migrate) module
     - All up migrations are run on startup if `RUN_MIGRAGTIONS=true`
 - Uses the [zerolog](https://github.com/rs/zerolog) module for logging
@@ -23,6 +26,42 @@ A relatively simple golang application template with the following features:
 - Request validation using the [github.com/go-playground/validator/v10](https://github.com/go-playground/validator) module
 - Postgresql db intstance runs in a docker container
     - start with `docker-compose up`
+
+## Running the app
+```sh
+APP_ENV=dev go run . # Will load environment variables from a file named .env.dev
+```
+
+or
+
+```sh
+APP_ENV=dev go run . # Will load environment variables from the a file named .env
+```
+
+## DB Schema
+
+- Table: users
+    - id
+    - first_name
+    - last_name
+    - email
+    - password (brcrypt hash)
+    - scope (the maximum scope a user can reques an auth token for)
+    - updated_at
+    - created_at
+
+- Table: tokens
+    - id
+    - user_id (foreign key constraint references users.id, cascade delete)
+    - token_hash (SHA-256 Hash)
+    - expiry
+    - scope
+    - updated_at
+    - created_at
+
+- A trigger also exists on both tables to automatically set `updated_at` on a row to the current time whenever a row is updated.
+
+
 
 ## The following table lists all API endpoints, their behavior, and their required token scope:
 
@@ -68,19 +107,4 @@ A relatively simple golang application template with the following features:
     - Official postgresql image (v16.2)
 - Golang migrate CLI (optional)
 
-### TODO:
-1. ~~Token expiry~~
-2. ~~Allow a user to have multiple tokens~~
-2. ~~Order of env loading~~
-3. ~~Logging and middleware~~
-4. ~~Remove unecessary stripe stuff~~
-5. ~~APP_ENV and config env~~
-6. Test update and delete endpoints
-7. Add basic unit tests
-8. Env file comments
-9. Add more docs to README
-10. Auth middleware applied to group not individual routes. Use gin ?
-11. Expired toked  batch cleanup
-12. Global variables and app config
-
-
+*This is just an application template, to be extended/forked if it contains some of your requirements, it is not intended to have any use case aside from this*

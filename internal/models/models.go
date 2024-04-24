@@ -116,13 +116,13 @@ func (m *DBModel) Authenticate(email, password string) (int, error) {
 	}
 }
 
-func (m *DBModel) UpdatePasswordForUser(u User, hash string) error {
+func (m *DBModel) UpdatePasswordForUser(userId int, u UpdateUserRequest, hash string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	stmt := `update users set password = ? where id = ?`
+	stmt := `update users set password = $1 where id = $2`
 
-	_, err := m.DB.ExecContext(ctx, stmt, hash, u.ID)
+	_, err := m.DB.ExecContext(ctx, stmt, hash, userId)
 	if err != nil {
 		return err
 	}
@@ -130,15 +130,15 @@ func (m *DBModel) UpdatePasswordForUser(u User, hash string) error {
 	return nil
 }
 
-func (m *DBModel) GetAllUsers() ([]*User, error) {
+func (m *DBModel) GetAllUsers() ([]*GetUserResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	var users []*User
+	var users []*GetUserResponse
 
 	query := `
 		select
-			id, last_name, first_name, email, created_at, updated_at
+			first_name, last_name, email, created_at
 		from
 			users
 		order by
@@ -152,15 +152,13 @@ func (m *DBModel) GetAllUsers() ([]*User, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var u User
+		var u GetUserResponse
 		err = rows.Scan(
-			&u.ID,
-			&u.LastName,
 			&u.FirstName,
+			&u.LastName,
 			&u.Email,
-			&u.CreatedAt,
-			&u.UpdatedAt,
-		)
+			&u.CreatedAt)
+
 		if err != nil {
 			return nil, err
 		}
@@ -170,15 +168,15 @@ func (m *DBModel) GetAllUsers() ([]*User, error) {
 	return users, nil
 }
 
-func (m *DBModel) GetOneUser(id int) (User, error) {
+func (m *DBModel) GetOneUser(id int) (GetUserResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	var u User
+	var u GetUserResponse
 
 	query := `
 		select
-			id, last_name, first_name, email, created_at, updated_at
+			first_name, last_name, email, created_at
 		from
 			users
 		where id = $1`
@@ -186,38 +184,42 @@ func (m *DBModel) GetOneUser(id int) (User, error) {
 	row := m.DB.QueryRowContext(ctx, query, id)
 
 	err := row.Scan(
-		&u.ID,
-		&u.LastName,
 		&u.FirstName,
+		&u.LastName,
 		&u.Email,
-		&u.CreatedAt,
-		&u.UpdatedAt,
-	)
+		&u.CreatedAt)
+
 	if err != nil {
 		return u, err
 	}
 	return u, nil
 }
 
-func (m *DBModel) EditUser(u User) error {
+func (m *DBModel) EditUser(userId int, u UpdateUserRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	stmt := `
-		update users set
-			first_name = $1,
-			last_name = $2,
-			email = $3,
-			updated_at = NOW()`
+	// If at least 1 field set
+	stmt := `UPDATE users 
+		SET first_name = COALESCE(NULLIF($1, ''), first_name),
+		last_name = COALESCE(NULLIF($2, ''), last_name),
+		email = COALESCE(NULLIF($3, ''), email)
+		WHERE id = $4`
 
-	_, err := m.DB.ExecContext(ctx, stmt,
+	res, err := m.DB.ExecContext(ctx, stmt,
 		u.FirstName,
 		u.LastName,
-		u.Email)
+		u.Email,
+		userId)
+
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return errors.New("user not found")
+	}
 
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -248,18 +250,17 @@ func (m *DBModel) DeleteUser(id int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	stmt := `delete from users where id = ?`
+	// foreign key constraint (on delete cascade) will also
+	// delete any associated tokens with the user
+	stmt := `delete from users where id = $1`
 
-	_, err := m.DB.ExecContext(ctx, stmt, id)
+	res, err := m.DB.ExecContext(ctx, stmt, id)
 	if err != nil {
 		return err
 	}
 
-	// Also remove the token from DB
-	stmt = "delete from tokens where user_id = ?"
-	_, err = m.DB.ExecContext(ctx, stmt, id)
-	if err != nil {
-		return err
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return errors.New("user not found")
 	}
 
 	return nil

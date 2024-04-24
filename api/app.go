@@ -64,13 +64,15 @@ func Run() {
 	cfg.port = u.GetIntEnvOrDefault("API_PORT", 4001)
 
 	// Environment
-	cfg.env = u.GetEnvOrDefault("API_ENV", "dev")
+	cfg.env = u.GetEnvOrDefault("APP_ENV", "dev")
 
 	conn, err := db.OpenDB(cfg.db.dsn)
+
 	if err != nil {
 		log.Panic().Str("dsn", cfg.db.dsn).AnErr("error", err).Msg("Failed to open database")
 	}
-	if cfg.env == "development" {
+
+	if cfg.env == "dev" {
 		u.InfoLog("Succesfully opened database")
 	}
 
